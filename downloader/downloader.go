@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/khorevaa/logos"
+	"github.com/v8platform/oneget/unpacker"
 	"golang.org/x/net/html"
 	"io"
 	"io/ioutil"
@@ -33,9 +34,10 @@ var semaMaxConnections = make(chan struct{}, 10)
 var log = logos.New("github.com/v8platform/oneget/downloader").Sugar()
 
 type FileToDownload struct {
-	url  string
-	path string
-	name string
+	url      []string
+	basePath string
+	path     string
+	name     string
 }
 
 type Config struct {
@@ -46,7 +48,11 @@ type Config struct {
 	Nicks         map[string]bool
 	VersionFilter string
 	DistribFilter string
+	Extract       bool
+	ExtractPath   string
+	Rename        bool
 }
+
 
 type Downloader struct {
 	Config
@@ -286,7 +292,7 @@ func (dr *Downloader) addFileToChannel(u, href string) {
 	fileName, filePath, err := dr.fileNameFromUrl(u)
 	if err == nil {
 		fileToDownload := FileToDownload{
-			url:  href,
+			url:  []string{href},
 			path: filePath,
 			name: fileName,
 		}
@@ -348,7 +354,7 @@ func (dr *Downloader) downloadFile(fileToDownload *FileToDownload) (os.FileInfo,
 		log.Debugf("Getting a file from url: %s", fileToDownload.url)
 
 		acquireSemaConnections()
-		resp, err := dr.httpClient.Get(fileToDownload.url)
+		resp, err := dr.httpClient.Get(fileToDownload.url[0])
 		if err != nil {
 			return nil, err
 		}
@@ -365,14 +371,43 @@ func (dr *Downloader) downloadFile(fileToDownload *FileToDownload) (os.FileInfo,
 		if err != nil {
 			return nil, err
 		}
+
 		f.Close()
 
+		log.Debugf("End of receiving file by url: %s", fileToDownload.url)
+		log.Debugf("File saved to: %s", fileName)
 		log.Debugf("End of receiving file by url: %s", fileToDownload.url)
 		log.Debugf("File saved to: %s", fileName)
 
 		err = os.Rename(fileName+tempFileSuffix, fileName)
 		if err != nil {
 			return nil, err
+		}
+
+		if dr.Extract {
+			extractDir := dr.ExtractPath
+			unpacker.Extract(fileName, extractDir)
+
+			if dr.Rename {
+				files, err := ioutil.ReadDir(extractDir)
+				if err != nil {
+					return nil, err
+				}
+				for _, file := range files {
+					if file.IsDir() {
+						continue
+					}
+					oldName := file.Name()
+					newName := unpacker.GetAliasesDistrib(oldName)
+					err := os.Rename(
+							filepath.Join(extractDir, oldName),
+							filepath.Join(extractDir, newName))
+					if err != nil {
+						return nil, err
+					}
+				}
+
+			}
 		}
 
 		fileInfo, err := os.Stat(fileName)
@@ -383,7 +418,7 @@ func (dr *Downloader) downloadFile(fileToDownload *FileToDownload) (os.FileInfo,
 		return fileInfo, nil
 
 	} else if err != nil {
-
+		log.Debugf("Error download files: %s", err)
 	}
 
 	return nil, nil

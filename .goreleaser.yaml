@@ -29,6 +29,7 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^skip:'
       - Merge pull request
       - Merge branch
 dockers:

@@ -7,8 +7,7 @@ import (
 var Commands = []Command{
 
 	&getCmd{},
-	//&listCmd{},
-
+	&listCmd{},
 }
 
 type Command interface {

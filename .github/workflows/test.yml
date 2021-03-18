@@ -19,4 +19,4 @@ jobs:
           go mod tidy
       - name: Run Test
         run: |
-          go test -race
+          go test -coverprofile=coverage.out ./...
